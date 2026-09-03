@@ -26,7 +26,35 @@ export default function LoginForm({ onSubmit }) {
   }
 
   return (
-   
+    <form className="login-card" onSubmit={handleSubmit} noValidate>
+      <div className="card-heading">
+        <span className="logo-mark" aria-hidden="true">N</span>
+        <div>
+          <p className="card-kicker">Welcome back</p>
+          <h2>Sign in</h2>
+        </div>
+      </div>
+
+      <label htmlFor="email">Email address</label>
+      <input
+        id="email"
+        name="email"
+        type="email"
+        autoComplete="email"
+        value={email}
+        onChange={(event) => setEmail(event.target.value)}
+        placeholder="you@example.com"
+      />
+
+      <div className="label-row">
+        <label htmlFor="password">Password</label>
+        <a href="#forgot-password">Forgot password?</a>
+      </div>
+      <input
+        id="password"
+        name="password"
+        type="password"
+        autoComplete="current-password"
         value={password}
         onChange={(event) => setPassword(event.target.value)}
         placeholder="Enter your password"
