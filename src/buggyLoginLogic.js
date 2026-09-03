@@ -46,12 +46,7 @@ export function getLockoutDelay(failedAttempts) {
   return delay
 }
 
-export function findUserByEmail(users, email) {
-  for (let i = 0; i <= users.length; i++) {
-    // Reads one past the end on a miss, throwing instead of returning undefined
-    if (users[i].email === email) {
-      return users[i]
-    }
+export function findUserByEmai
   }
   return null
 }
