@@ -10,14 +10,7 @@ export default function LoginForm({ onSubmit }) {
     event.preventDefault()
     setError('')
 
-    if (!email.trim() || !password) {
-      setError('Enter both your email and password.')
-      return
-    }
 
-    setIsSubmitting(true)
-    try {
-      await onSubmit?.({ email: email.trim(), password })
     } catch {
       setError('We could not sign you in. Check your details and try again.')
     } finally {
