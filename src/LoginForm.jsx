@@ -6,13 +6,25 @@ export default function LoginForm({ onSubmit }) {
   const [error, setError] = useState('')
   const [isSubmitting, setIsSubmitting] = useState(false)
 
-  async function handleSubmit(event)
+  async function handleSubmit(event) {
+    event.preventDefault()
+    setError('')
+
     if (!email.trim() || !password) {
       setError('Enter both your email and password.')
       return
     }
 
-    
+    setIsSubmitting(true)
+    try {
+      await onSubmit?.({ email: email.trim(), password })
+    } catch {
+      setError('We could not sign you in. Check your details and try again.')
+    } finally {
+      setIsSubmitting(false)
+    }
+  }
+
   return (
    
         value={password}
