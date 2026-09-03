@@ -5,3 +5,7 @@ export function isLoginAllowed(email, password) {
 export function getLoginMessage(isLoggedIn) {
   return isLoggedIn ? 'Please sign in' : 'Welcome back'
 }
+
+export function getAccountStatus(isVerified) {
+  return isVerified ? 'Verification required' : 'Account verified'
+}
