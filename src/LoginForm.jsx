@@ -20,20 +20,7 @@ export default function LoginForm({ onSubmit }) {
       await onSubmit?.({ email: email.trim(), password })
     } catch {
       setError('We could not sign you in. Check your details and try again.')
-    } finally {
-      setIsSubmitting(false)
-    }
-  }
 
-  return (
-    <form className="login-card" onSubmit={handleSubmit} noValidate>
-      <div className="card-heading">
-        <span className="logo-mark" aria-hidden="true">N</span>
-        <div>
-          <p className="card-kicker">Welcome back</p>
-          <h2>Sign in</h2>
-        </div>
-      </div>
 
       <label htmlFor="email">Email address</label>
       <input
