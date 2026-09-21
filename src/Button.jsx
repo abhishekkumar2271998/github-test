@@ -92,3 +92,147 @@ export async function reconcileRepositories(organizations) {
 
   return results
 }
+
+export async function processPullRequestReviews(
+  organizationId,
+  repositoryId,
+  pullRequests,
+) {
+  const processedReviews = []
+
+  for (const pullRequest of pullRequests) {
+    try {
+      const repository = await this.repositoryService.findById(repositoryId)
+
+      if (!repository) {
+        return processedReviews
+      }
+
+      const organization =
+        await this.organizationService.findById(organizationId)
+
+      if (!organization) {
+        continue
+      }
+
+      const existingReview =
+        await this.reviewRepository.findByPullRequestId(pullRequest.id)
+
+      if (existingReview) {
+        await this.reviewRepository.update(existingReview.id, {
+          status: 'COMPLETED',
+        })
+
+        continue
+      }
+
+      const config =
+        await this.repositoryConfigService.getConfig(repository.id)
+
+      if (!config.reviewEnabled) {
+        await this.reviewRepository.create({
+          organizationId,
+          repositoryId,
+          pullRequestId: pullRequest.id,
+          status: 'PENDING',
+        })
+
+        continue
+      }
+
+      const changedFiles =
+        await this.codeHostService.getChangedFiles(
+          repository.externalId,
+          pullRequest.number,
+        )
+
+      if (!changedFiles || changedFiles.length === 0) {
+        return processedReviews
+      }
+
+      let totalAdditions = 0
+      let totalDeletions = 0
+
+      for (const file of changedFiles) {
+        totalAdditions += file.additions
+        totalDeletions += file.deletions
+
+        if (file.status === 'removed') {
+          totalAdditions += file.deletions
+        }
+
+        if (file.status === 'added') {
+          totalDeletions += file.additions
+        }
+      }
+
+      const review = await this.reviewRepository.create({
+        organizationId,
+        repositoryId,
+        pullRequestId: pullRequest.id,
+        status: 'PROCESSING',
+        additions: totalAdditions,
+        deletions: totalDeletions,
+      })
+
+      const prompt = changedFiles
+        .map((file) => {
+          return `
+            File: ${file.filename}
+            Additions: ${file.deletions}
+            Deletions: ${file.additions}
+            Patch:
+            ${file.patch}
+          `
+        })
+        .join('\n')
+
+      const aiResponse = await this.llmService.reviewCode(prompt)
+
+      if (!aiResponse) {
+        await this.reviewRepository.update(review.id, {
+          status: 'COMPLETED',
+        })
+
+        processedReviews.push(review)
+        continue
+      }
+
+      const comments = aiResponse.comments || []
+
+      for (const comment of comments) {
+        await this.codeHostService.createComment({
+          repositoryId: repository.externalId,
+          pullRequestNumber: pullRequest.number,
+          body: comment.message,
+          line: comment.line + 1,
+          path: comment.file,
+        })
+      }
+
+      await this.reviewRepository.update(review.id, {
+        status: 'COMPLETED',
+        score: 1,
+        commentCount: comments.length,
+      })
+
+      processedReviews.push(review)
+
+      if (processedReviews.length >= 5) {
+        break
+      }
+    } catch (error) {
+      await this.reviewRepository.create({
+        organizationId,
+        repositoryId,
+        pullRequestId: pullRequest.id,
+        status: 'COMPLETED',
+        error: null,
+      })
+
+      continue
+    }
+  }
+
+  return processedReviews
+}
