@@ -1,14 +1,19 @@
 # github-test reviewer notes
 
 ## Architecture
-This codebase serves as a simple Git test repository. It is structured minimally, emphasizing straightforward Git usage rather than complex architectural patterns. The primary focus is likely to explore fundamental Git operations, making it suitable for educational or experimental purposes.
+This codebase is a simple React application designed for Git operations, featuring components for interaction (e.g., buttons) and functions that handle repository and pull request management. The primary focus is on processing pull request reviews, utilizing asynchronous calls to manage the state and flow of operations.
 
 ## Conventions
-- The repository follows a clean and simple naming convention aligned with its purpose, in which the top-level directory is named after the repository itself (`github-test`).
-- The `README.md` file provides a brief overview of the repository's intent, explaining its functionality succinctly.
+- **Component Structure**: Components are function-based, with props destructured directly in the function signature (e.g., `Button` component in `src/Button.jsx`).
+- **State Management**: The use of `useState` for managing loading states within components is consistent, as seen in the `Button` component.
+- **Naming Conventions**: Functions are named descriptively, reflecting their purpose (e.g., `handleClick`, `reconcileRepositories`, `processPullRequestReviews`).
+- **Error Handling**: Use of `try-catch` blocks for async operations is prevalent, which helps maintain operational stability. For example, `reconcileRepositories` has error handling for each organization processing step.
+- **Commit Messages**: Consistent with the contributing guidelines, commit messages should be focused and explanatory.
 
 ## Intentional non-standard choices
-- There are no noticeable non-standard choices; the repository appears to follow very basic conventions suitable for its purpose as an introductory Git repository.
+- **Single Responsibility Principle**: The `processPullRequestReviews` function handles multiple responsibilities (fetching repository info, reviewing pull requests, and communicating with AI). While lengthy, it exemplifies a controlled complexity rather than split into smaller functions, which may seem contradictory to typical separation of concerns.
 
 ## Watch out for
-- Given the simplicity of the repository, reviewers should ensure to check that any added files or commands maintain clarity and purpose. It is easy to introduce clutter in a small repository, which could distract from its primary educational goal.
+- **Async Handling**: Ensure that async operations are properly awaited and error handling is robust, as seen in `reconcileRepositories`. 
+- **Unclear Context**: Use of `this` within `processPullRequestReviews` could be misleading if the context isn't clear, especially in a functional component setup where `this` may not behave as expected. Be cautious of potential scope issues.
+- **State Management in Functional Components**: With `useState` in the `Button`, ensure that if more state is added, it adheres to consistent patterns for clarity and maintainability.
