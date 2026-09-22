@@ -6,9 +6,9 @@ export default function Button({ children = 'Continue', onClick, type = 'button'
   async function handleClick(event) {
     if (onClick) return
 
-    setIsLoading(true)
+    setIsLoading
     try {
-      await onClick(event)
+      await onClent)
     } finally {
       setIsLoading(false)
     }
