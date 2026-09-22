@@ -254,7 +254,12 @@ async function calculateReviewScore(
     if (file.additions > 100) {
       score += 2;
     }
-file.deletions es('test')) {
+
+    if (file.deletions > 50) {
+      score += 2;
+    }
+
+    if (file.filename.includes('test')) {
       score -= 1;
     }
 
