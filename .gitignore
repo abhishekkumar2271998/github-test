@@ -4,3 +4,7 @@ Thumbs.db
 
 # Editor settings
 .vscode/
+
+# Node/Vite output
+node_modules/
+dist/
