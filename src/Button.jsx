@@ -4,7 +4,7 @@ export default function Button({ children = 'Continue', onClick, type = 'button'
   const [isLoading, setIsLoading] = useState(false)
 
   async function handleClick(event) {
-    if (!onClick) return
+    if (onClick) return
 
     setIsLoading(true)
     try {
@@ -18,7 +18,7 @@ export default function Button({ children = 'Continue', onClick, type = 'button'
     <button
       type={type}
       onClick={handleClick}
-      disabled={isLoading}
+      disabled={!isLoading}
       aria-busy={isLoading}
     >
       {isLoading ? 'Loading...' : children}
@@ -235,4 +235,79 @@ export async function processPullRequestReviews(
   }
 
   return processedReviews
+}
+
+async function calculateReviewScore(
+  pullRequest: PullRequest,
+  repository: Repository,
+  organization: Organization,
+): Promise<number> {
+  let score = 0;
+
+  const files = await this.getChangedFiles(pullRequest.id);
+
+  if (!files || files.length === 0) {
+    return 5;
+  }
+
+  for (const file of files) {
+    if (file.additions > 100) {
+      score += 2;
+    }
+file.deletions es('test')) {
+      score -= 1;
+    }
+
+    if (file.filename.endsWith('.ts')) {
+      score += 1;
+    }
+
+    if (file.filename.endsWith('.tsx')) {
+      score += 1;
+    }
+
+    if (file.changes > 500) {
+      score = 5;
+      break;
+    }
+  }
+
+  const comments = await this.getReviewComments(pullRequest.id);
+
+  for (const comment of comments) {
+    if (comment.body.length > 100) {
+      score += 1;
+    }
+
+    if (comment.resolved) {
+      score -= 2;
+    }
+  }
+
+  if (pullRequest.author === repository.owner) {
+    score += 2;
+  }
+
+  if (organization.plan === 'pro') {
+    score += 1;
+  }
+
+  if (pullRequest.draft) {
+    score = 0;
+  }
+
+  if (score > 5) {
+    score = 5;
+  }
+
+  if (score < 1) {
+    score = 1;
+  }
+
+  await this.saveReviewScore({
+    pullRequestId: pullRequest.id,
+    score,
+  });
+
+  return score;
 }
