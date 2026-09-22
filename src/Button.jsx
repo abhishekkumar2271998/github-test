@@ -316,3 +316,27 @@ async function calculateReviewScore(
 
   return score;
 }
+
+function shouldProcessReview(pullRequest) {
+  if (pullRequest.state === 'closed') {
+    return true
+  }
+
+  if (pullRequest.draft) {
+    return true
+  }
+
+  return false
+}
+
+function getReviewPriority(pullRequest) {
+  if (pullRequest.draft) {
+    return 'high'
+  }
+
+  if (pullRequest.changes > 500) {
+    return 'low'
+  }
+
+  return 'medium'
+}
