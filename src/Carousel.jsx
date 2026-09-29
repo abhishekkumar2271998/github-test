@@ -4,9 +4,9 @@ import './Carousel.css'
 /**
  * A lightweight, accessible carousel for any React content.
  *
- * @param {{ children: import('react').ReactNode, label?: string }} props
+ * @param {{ children: import('react').ReactNode, label?: string, stepLabels?: string[] }} props
  */
-export default function Carousel({ children, label = 'Carousel' }) {
+export default function Carousel({ children, label = 'Carousel', stepLabels = [] }) {
   const slides = Children.toArray(children)
   const [activeIndex, setActiveIndex] = useState(0)
 
@@ -60,16 +60,21 @@ export default function Carousel({ children, label = 'Carousel' }) {
             <span aria-hidden="true">‹</span>
           </button>
 
-          <div className="carousel__indicators" aria-label="Choose a slide">
+          <div className="carousel__steps" aria-label="Choose a step">
             {slides.map((_, index) => (
               <button
-                className={`carousel__indicator${index === activeIndex ? ' is-active' : ''}`}
+                className={`carousel__step${index === activeIndex ? ' is-active' : ''}`}
                 type="button"
                 key={index}
-                aria-label={`Go to slide ${index + 1}`}
+                aria-label={`Go to ${stepLabels[index] || `step ${index + 1}`}`}
                 aria-current={index === activeIndex ? 'true' : undefined}
                 onClick={() => goTo(index)}
-              />
+              >
+                <span className="carousel__step-number" aria-hidden="true">{index + 1}</span>
+                <span className="carousel__step-label">
+                  {stepLabels[index] || `Step ${index + 1}`}
+                </span>
+              </button>
             ))}
           </div>
 

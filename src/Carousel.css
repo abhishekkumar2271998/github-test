@@ -19,7 +19,7 @@
 }
 
 .carousel__arrow,
-.carousel__indicator {
+.carousel__step {
   display: grid;
   place-items: center;
   border: 0;
@@ -40,28 +40,60 @@
   background: #e2e2e2;
 }
 
-.carousel__indicators {
+.carousel__steps {
   display: flex;
   align-items: center;
   gap: 0.5rem;
 }
 
-.carousel__indicator {
-  width: 0.625rem;
-  height: 0.625rem;
-  padding: 0;
-  border-radius: 50%;
-  background: #c8c8c8;
+.carousel__step {
+  grid-auto-flow: column;
+  gap: 0.4rem;
+  padding: 0.35rem 0.6rem;
+  border-radius: 999px;
+  background: transparent;
+  color: #555;
+  font: inherit;
+  font-size: 0.875rem;
 }
 
-.carousel__indicator.is-active {
+.carousel__step-number {
+  display: grid;
+  place-items: center;
+  width: 1.5rem;
+  height: 1.5rem;
+  border-radius: 50%;
+  background: #e5e5e5;
+}
+
+.carousel__step.is-active {
+  color: #171717;
+  font-weight: 600;
+}
+
+.carousel__step.is-active .carousel__step-number {
   background: #171717;
+  color: white;
 }
 
 .carousel__arrow:focus-visible,
-.carousel__indicator:focus-visible {
+.carousel__step:focus-visible {
   outline: 2px solid #2563eb;
   outline-offset: 3px;
+}
+
+@media (max-width: 480px) {
+  .carousel__controls {
+    gap: 0.5rem;
+  }
+
+  .carousel__steps {
+    gap: 0.15rem;
+  }
+
+  .carousel__step-label {
+    display: none;
+  }
 }
 
 @media (prefers-reduced-motion: no-preference) {
