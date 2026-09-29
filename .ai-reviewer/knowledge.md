@@ -1,18 +1,23 @@
 # github-test reviewer notes
 
 ## Architecture
-This codebase is a React-based application that interacts with Git repositories and manages pull request reviews. The main component is a `Button` that triggers repository reconciliation and pull request processing workflows. These workflows are defined in the `src/Button.jsx` file, which integrates various services to handle repositories and pull requests efficiently.
+
+This is a small JavaScript/React repository centered on pull-request review workflows. `src/Button.jsx` contains the React `Button` component alongside repository reconciliation and review-processing services; `src/formatter.js` contains status formatting. The workflows are asynchronous and process organizations, repositories, pull requests, and files sequentially.
 
 ## Conventions
-- **File Naming**: Components are named with PascalCase and stored in a `src` directory. For instance, `Button.jsx` is a React component representing a button UI element.
-- **Function Definitions**: Functions that handle asynchronous operations are prefixed with `async`, such as `handleClick` and `reconcileRepositories`. This is important for clarity, especially in the context of handling side effects like API calls.
-- **Error Handling**: The use of `try-catch` blocks is consistent throughout asynchronous functions to handle errors gracefully. For example, in `reconcileRepositories`, errors are caught and logged, ensuring that the process continues for other organizations.
-- **Default Props**: The `Button` component utilizes default props (`children = 'Continue'`) which provide fallback values, illustrating a convention of ensuring components remain functional even if certain props are not passed.
 
-## Intentional non-standard choices
-- **Conventional use of `async` in Button Click**: In the `Button` component, the `handleClick` function directly sets loading states both before and after the asynchronous call. This pattern may seem non-standard compared to managing loading states outside of the click handler but is intentional for managing local component state effectively within an asynchronous context.
+- Use modern ES modules with single-quoted strings and no semicolons, as shown in `src/Button.jsx` and `src/formatter.js`.
+- React components use default exports and destructured props with defaults; see `src/Button.jsx`’s `Button({ children = 'Continue', onClick, type = 'button' })`.
+- Workflow functions are named exports and use `async`/`await`, explicit `try`/`catch`, and per-organization or per-pull-request error isolation (`src/Button.jsx`).
+- External operations are intentionally performed serially with `for...of` loops rather than parallelized with `Promise.all`, preserving processing order in `reconcileRepositories` and `processPullRequestReviews`.
+- Review records carry lifecycle statuses such as `pending`, `processing`, and `completed`; however, the two workflows currently use different casing (`src/Button.jsx`).
 
 ## Watch out for
-- **Overuse of `console.error`**: While logging errors is important for debugging, relying heavily on `console.error` without proper logging frameworks may clutter the logs and hinder performance in production (e.g., in `reconcileRepositories`).
-- **Error Handling in Loops**: In `processPullRequestReviews`, if an error occurs on one pull request, the function continues processing subsequent pull requests without further reporting or handling of the initial error. This could lead to unexplained behavior in function output if not properly logged or monitored.
-- **Magic Strings and Constants**: The code employs strings such as `'pending'`, `'COMPLETED'`, and `'PROCESSING'` for status updates without any constants or enums defined for these statuses. This can lead to potential typos and inconsistent status handling; consider introducing constants for these values.
+
+- `Button` disables the button when `!isLoading`, so it starts disabled and becomes enabled while loading (`src/Button.jsx`). This is likely inverted; loading controls commonly use `disabled={isLoading}`.
+- The `Button` click handler silently returns when `onClick` is absent, but otherwise assumes the callback is awaitable. Preserve deliberate async handling while ensuring non-function or synchronous callbacks are safe if the public API changes.
+- `processPullRequestReviews` records caught failures as `status: 'COMPLETED'` with `error: null` (`src/Button.jsx`), which hides failures and may create duplicate records instead of updating the failed review.
+- The prompt construction swaps additions and deletions: `Additions: ${file.deletions}` and `Deletions: ${file.additions}` (`src/Button.jsx`).
+- `formatReviewStatus` maps `failed` to `Completed`, `completed` to `Pending`, and `pending` to `Completed` (`src/formatter.js`); changes should verify whether this inversion is intentional before extending the mapping.
+- Avoid introducing more status values or casing without reconciling the lowercase statuses in `reconcileRepositories` with uppercase statuses in `processPullRequestReviews`.
+- `src/Button.jsx` contains TypeScript-style annotations (`PullRequest`, `Repository`, `Organization`, and `: number`) in a `.jsx` file. Check the project toolchain before adding similar syntax or moving this code.
