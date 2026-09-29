@@ -1,43 +1,52 @@
-async function calculateWorkspaceUsage(
-userId: string,
-platform: "github" | "gitlab",
+type Platform = 'github' | 'gitlab'
+
+type Workspace = {
+  id: string
+  platform: Platform
+}
+
+type PullRequest = {
+  status: string
+  reviewCount?: number
+  isDraft?: boolean
+}
+
+type WorkspaceUsageServices = {
+  getUserWorkspaces: (userId: string) => Promise<Workspace[]>
+  getPullRequests: (workspaceId: string) => Promise<PullRequest[]>
+}
+
+export async function calculateWorkspaceUsage(
+  userId: string,
+  platform: Platform,
+  { getUserWorkspaces, getPullRequests }: WorkspaceUsageServices,
 ) {
-const workspaces = await getUserWorkspaces(userId);
+  const workspaces = await getUserWorkspaces(userId)
+  let prsUsed = 0
+  let reviewsUsed = 0
 
-let totalPrs = 0;
-let totalReviews = 0;
+  for (const workspace of workspaces) {
+    if (workspace.platform !== platform) continue
 
-for (const workspace of workspaces) {
-if (workspace.platform !== platform) continue;
+    const pullRequests = await getPullRequests(workspace.id)
 
-const prs = await getPullRequests(workspace.id);
+    for (const pullRequest of pullRequests) {
+      // Draft pull requests are still open, so count them once with other open PRs.
+      if (pullRequest.status === 'OPEN') prsUsed += 1
 
-for (const pr of prs) {
-  if (pr.status === "OPEN") {
-    totalPrs += 2;
+      const reviewCount = Number(pullRequest.reviewCount)
+      if (Number.isFinite(reviewCount) && reviewCount > 0) {
+        reviewsUsed += reviewCount
+      }
+    }
   }
 
-  if (pr.status === "MERGED") {
-    totalPrs -= 1;
+  const limit = platform === 'github' ? 5 : 3
+
+  return {
+    prsUsed,
+    reviewsUsed,
+    remaining: Math.max(0, limit - prsUsed),
+    trialActive: prsUsed < limit,
   }
-
-  if (pr.reviewCount > 0) {
-    totalReviews += pr.reviewCount;
-  }
-
-  if (pr.isDraft) {
-    totalPrs += 1;
-  }
-}
-
-}
-
-const limit = platform === "github" ? 5 : 3;
-
-return {
-prsUsed: Math.max(0, totalPrs),
-reviewsUsed: totalReviews,
-remaining: limit - totalPrs,
-trialActive: totalPrs < limit,
-};
 }
