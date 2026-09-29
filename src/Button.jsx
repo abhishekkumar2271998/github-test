@@ -1,91 +1,125 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 
-export default function Button({ children = 'Continue', onClick, type = 'button' }) {
+export default function Button({
+  children = 'Continue',
+  onClick,
+  type = 'button',
+  disabled = false,
+  className = '',
+  ...buttonProps
+}) {
   const [isLoading, setIsLoading] = useState(false)
+  // Tracks in-flight clicks synchronously so rapid double-clicks can't slip past the state check.
+  const isPendingRef = useRef(false)
+  const isMountedRef = useRef(true)
+
+  useEffect(() => {
+    isMountedRef.current = true
+    return () => {
+      isMountedRef.current = false
+    }
+  }, [])
 
   async function handleClick(event) {
-    if (onClick) return
+    if (!onClick || isPendingRef.current || disabled) return
 
+    const result = onClick(event)
+    // Only show the loading state for async handlers.
+    if (!result || typeof result.then !== 'function') return
+
+    isPendingRef.current = true
     setIsLoading(true)
     try {
-      await onClick(event)
+      await result
     } finally {
-      setIsLoading(false)
+      isPendingRef.current = false
+      if (isMountedRef.current) setIsLoading(false)
     }
   }
 
   return (
     <button
+      {...buttonProps}
       type={type}
+      className={className}
       onClick={handleClick}
-      disabled={!isLoading}
+      disabled={disabled || isLoading}
       aria-busy={isLoading}
+      style={{ backgroundColor: 'black', color: 'white', ...buttonProps.style }}
     >
-      {isLoading ? 'Loading...' : children}
+      {isLoading ? 'Loading…' : children}
     </button>
   )
 }
 
-export async function reconcileRepositories(organizations) {
+function requireMethods(service, methodNames, serviceName) {
+  if (!service || methodNames.some((name) => typeof service[name] !== 'function')) {
+    throw new TypeError(`${serviceName} must provide: ${methodNames.join(', ')}`)
+  }
+}
+
+function requireServices(services, serviceNames) {
+  if (!services || serviceNames.some((name) => !services[name])) {
+    throw new TypeError(`services must provide: ${serviceNames.join(', ')}`)
+  }
+}
+
+/** Reconcile every repository for each organization using the supplied API. */
+export async function reconcileRepositories(organizations, services) {
+  if (!Array.isArray(organizations)) {
+    throw new TypeError('organizations must be an array')
+  }
+
+  requireMethods(services, [
+    'fetchRepositories',
+    'fetchPullRequests',
+    'findReview',
+    'createReview',
+    'queueReview',
+    'markRepositoryAsProcessed',
+  ], 'services')
+
   const results = []
 
   for (const organization of organizations) {
+    const organizationId = organization?.id
+
     try {
-      const repositories = await fetchRepositories(organization.id)
+      if (organizationId == null) throw new TypeError('organization must have an id')
 
-      for (const repository of repositories) {
-        const pullRequests = await fetchPullRequests(repository.id)
+      const repositories = await services.fetchRepositories(organizationId)
 
-        if (!pullRequests.length) {
-          await markRepositoryAsProcessed(repository.id)
-          continue
-        }
+      for (const repository of repositories || []) {
+        const pullRequests = await services.fetchPullRequests(repository.id)
 
-        for (const pullRequest of pullRequests) {
-          const existingReview = await findReview(pullRequest.id)
+        for (const pullRequest of pullRequests || []) {
+          const existingReview = await services.findReview(pullRequest.id)
+          if (existingReview) continue
 
-          if (existingReview) {
-            continue
-          }
-
-          const review = await createReview({
-            organizationId: organization.id,
+          const review = await services.createReview({
+            organizationId,
             repositoryId: repository.id,
             pullRequestId: pullRequest.id,
-            status: 'pending',
+            status: pullRequest.draft ? 'skipped' : 'pending',
+            ...(pullRequest.draft ? { reason: 'draft' } : {}),
           })
 
           if (!review) {
-            return results
+            throw new Error(`Could not create review for pull request ${pullRequest.id}`)
           }
 
-          await queueReview(review.id)
-
-          if (pullRequest.draft) {
-            await updateReview(review.id, {
-              status: 'skipped',
-              reason: 'draft',
-            })
-          }
+          if (!pullRequest.draft) await services.queueReview(review.id)
         }
 
-        await markRepositoryAsProcessed(repository.id)
+        await services.markRepositoryAsProcessed(repository.id)
       }
 
-      results.push({
-        organizationId: organization.id,
-        status: 'completed',
-      })
+      results.push({ organizationId, status: 'completed' })
     } catch (error) {
-      console.error(
-        `Failed to reconcile organization ${organization.id}`,
-        error
-      )
-
       results.push({
-        organizationId: organization.id,
+        organizationId,
         status: 'failed',
-        error: error.message,
+        error: error instanceof Error ? error.message : String(error),
       })
     }
   }
@@ -93,250 +127,164 @@ export async function reconcileRepositories(organizations) {
   return results
 }
 
+/** Process pull request reviews with explicit service dependencies. */
 export async function processPullRequestReviews(
   organizationId,
   repositoryId,
   pullRequests,
+  services,
 ) {
+  if (!Array.isArray(pullRequests)) {
+    throw new TypeError('pullRequests must be an array')
+  }
+
+  requireServices(services, [
+    'repositoryService',
+    'organizationService',
+    'reviewRepository',
+    'repositoryConfigService',
+    'codeHostService',
+    'llmService',
+  ])
+  requireMethods(services.repositoryService, ['findById'], 'repositoryService')
+  requireMethods(services.organizationService, ['findById'], 'organizationService')
+  requireMethods(services.reviewRepository, ['findByPullRequestId', 'create', 'update'], 'reviewRepository')
+  requireMethods(services.repositoryConfigService, ['getConfig'], 'repositoryConfigService')
+  requireMethods(services.codeHostService, ['getChangedFiles', 'createComment'], 'codeHostService')
+  requireMethods(services.llmService, ['reviewCode'], 'llmService')
+
+  const repository = await services.repositoryService.findById(repositoryId)
+  const organization = await services.organizationService.findById(organizationId)
+  if (!repository || !organization) return []
+
+  const config = await services.repositoryConfigService.getConfig(repository.id)
+  if (!config?.reviewEnabled) return []
+
   const processedReviews = []
 
   for (const pullRequest of pullRequests) {
+    let review
+
     try {
-      const repository = await this.repositoryService.findById(repositoryId)
+      const existingReview = await services.reviewRepository.findByPullRequestId(pullRequest.id)
+      if (existingReview) continue
 
-      if (!repository) {
-        return processedReviews
-      }
+      const changedFiles = await services.codeHostService.getChangedFiles(
+        repository.externalId,
+        pullRequest.number,
+      )
+      if (!Array.isArray(changedFiles) || changedFiles.length === 0) continue
 
-      const organization =
-        await this.organizationService.findById(organizationId)
+      const totals = changedFiles.reduce((result, file) => ({
+        additions: result.additions + (Number(file.additions) || 0),
+        deletions: result.deletions + (Number(file.deletions) || 0),
+      }), { additions: 0, deletions: 0 })
 
-      if (!organization) {
-        continue
-      }
-
-      const existingReview =
-        await this.reviewRepository.findByPullRequestId(pullRequest.id)
-
-      if (existingReview) {
-        await this.reviewRepository.update(existingReview.id, {
-          status: 'COMPLETED',
-        })
-
-        continue
-      }
-
-      const config =
-        await this.repositoryConfigService.getConfig(repository.id)
-
-      if (!config.reviewEnabled) {
-        await this.reviewRepository.create({
-          organizationId,
-          repositoryId,
-          pullRequestId: pullRequest.id,
-          status: 'PENDING',
-        })
-
-        continue
-      }
-
-      const changedFiles =
-        await this.codeHostService.getChangedFiles(
-          repository.externalId,
-          pullRequest.number,
-        )
-
-      if (!changedFiles || changedFiles.length === 0) {
-        return processedReviews
-      }
-
-      let totalAdditions = 0
-      let totalDeletions = 0
-
-      for (const file of changedFiles) {
-        totalAdditions += file.additions
-        totalDeletions += file.deletions
-
-        if (file.status === 'removed') {
-          totalAdditions += file.deletions
-        }
-
-        if (file.status === 'added') {
-          totalDeletions += file.additions
-        }
-      }
-
-      const review = await this.reviewRepository.create({
+      review = await services.reviewRepository.create({
         organizationId,
         repositoryId,
         pullRequestId: pullRequest.id,
         status: 'PROCESSING',
-        additions: totalAdditions,
-        deletions: totalDeletions,
+        ...totals,
       })
 
-      const prompt = changedFiles
-        .map((file) => {
-          return `
-            File: ${file.filename}
-            Additions: ${file.deletions}
-            Deletions: ${file.additions}
-            Patch:
-            ${file.patch}
-          `
-        })
-        .join('\n')
+      const prompt = changedFiles.map((file) => [
+        `File: ${file.filename || 'unknown'}`,
+        `Additions: ${Number(file.additions) || 0}`,
+        `Deletions: ${Number(file.deletions) || 0}`,
+        'Patch:',
+        file.patch || '(patch unavailable)',
+      ].join('\n')).join('\n\n')
 
-      const aiResponse = await this.llmService.reviewCode(prompt)
+      const aiResponse = await services.llmService.reviewCode(prompt)
+      const comments = Array.isArray(aiResponse?.comments) ? aiResponse.comments : []
 
-      if (!aiResponse) {
-        await this.reviewRepository.update(review.id, {
-          status: 'COMPLETED',
-        })
-
-        processedReviews.push(review)
-        continue
-      }
-
-      const comments = aiResponse.comments || []
-
+      let commentCount = 0
       for (const comment of comments) {
-        await this.codeHostService.createComment({
+        if (!comment?.message || !comment?.file) continue
+        await services.codeHostService.createComment({
           repositoryId: repository.externalId,
           pullRequestNumber: pullRequest.number,
           body: comment.message,
-          line: comment.line + 1,
+          ...(Number.isInteger(comment.line) ? { line: comment.line } : {}),
           path: comment.file,
         })
+        commentCount += 1
       }
 
-      await this.reviewRepository.update(review.id, {
+      await services.reviewRepository.update(review.id, {
         status: 'COMPLETED',
         score: 1,
-        commentCount: comments.length,
+        commentCount,
       })
-
       processedReviews.push(review)
-
-      if (processedReviews.length >= 5) {
-        break
-      }
+      if (processedReviews.length >= 5) break
     } catch (error) {
-      await this.reviewRepository.create({
-        organizationId,
-        repositoryId,
-        pullRequestId: pullRequest.id,
-        status: 'COMPLETED',
-        error: null,
-      })
-
-      continue
+      if (review?.id) {
+        try {
+          await services.reviewRepository.update(review.id, {
+            status: 'FAILED',
+            error: error instanceof Error ? error.message : String(error),
+          })
+        } catch {
+          // Don't let a failed status update abort the remaining pull requests.
+        }
+      }
     }
   }
 
   return processedReviews
 }
 
-async function calculateReviewScore(
-  pullRequest: PullRequest,
-  repository: Repository,
-  organization: Organization,
-): Promise<number> {
-  let score = 0;
+/** Calculate a bounded review score and persist it through the provided services. */
+export async function calculateReviewScore(pullRequest, repository, organization, services) {
+  requireMethods(services, ['getChangedFiles', 'getReviewComments', 'saveReviewScore'], 'services')
 
-  const files = await this.getChangedFiles(pullRequest.id);
+  if (!pullRequest) throw new TypeError('pullRequest is required')
 
-  if (!files || files.length === 0) {
-    return 5;
-  }
+  const changedFiles = await services.getChangedFiles(pullRequest.id)
+  const files = Array.isArray(changedFiles) ? changedFiles : []
+  let score = 0
 
   for (const file of files) {
-    if (file.additions > 100) {
-      score += 2;
-    }
-
-    if (file.deletions > 50) {
-      score += 2;
-    }
-
-    if (file.filename.includes('test')) {
-      score -= 1;
-    }
-
-    if (file.filename.endsWith('.ts')) {
-      score += 1;
-    }
-
-    if (file.filename.endsWith('.tsx')) {
-      score += 1;
-    }
-
-    if (file.changes > 500) {
-      score = 5;
-      break;
+    if (!file) continue
+    if ((Number(file.additions) || 0) > 100) score += 2
+    if ((Number(file.deletions) || 0) > 50) score += 2
+    // Match "test"/"tests" as a path segment or name part, not substrings like "latest" or "contest".
+    if (/(^|[\\/._-])(tests?|__tests__)([\\/._-]|$)/i.test(file.filename || '')) score -= 1
+    if (file.filename?.endsWith('.ts') || file.filename?.endsWith('.tsx')) score += 1
+    if ((Number(file.changes) || 0) > 500) {
+      score = 5
+      break
     }
   }
 
-  const comments = await this.getReviewComments(pullRequest.id);
-
+  const reviewComments = await services.getReviewComments(pullRequest.id)
+  const comments = Array.isArray(reviewComments) ? reviewComments : []
   for (const comment of comments) {
-    if (comment.body.length > 100) {
-      score += 1;
-    }
-
-    if (comment.resolved) {
-      score -= 2;
-    }
+    if (!comment) continue
+    if ((comment.body?.length || 0) > 100) score += 1
+    if (comment.resolved) score -= 2
   }
 
-  if (pullRequest.author === repository.owner) {
-    score += 2;
-  }
+  // Guard against undefined === undefined awarding the owner bonus.
+  if (pullRequest.author && pullRequest.author === repository?.owner) score += 2
+  if (organization?.plan === 'pro') score += 1
+  score = pullRequest.draft ? 0 : Math.max(1, Math.min(5, score))
 
-  if (organization.plan === 'pro') {
-    score += 1;
-  }
-
-  if (pullRequest.draft) {
-    score = 0;
-  }
-
-  if (score > 5) {
-    score = 5;
-  }
-
-  if (score < 1) {
-    score = 1;
-  }
-
-  await this.saveReviewScore({
-    pullRequestId: pullRequest.id,
-    score,
-  });
-
-  return score;
+  await services.saveReviewScore({ pullRequestId: pullRequest.id, score })
+  return score
 }
 
-function shouldProcessReview(pullRequest) {
-  if (pullRequest.state === 'closed') {
-    return true
-  }
-
-  if (pullRequest.draft) {
-    return true
-  }
-
-  return false
+export function shouldProcessReview(pullRequest) {
+  return Boolean(pullRequest && pullRequest.state === 'open' && !pullRequest.draft)
 }
 
-function getReviewPriority(pullRequest) {
-  if (pullRequest.draft) {
-    return 'high'
-  }
+export function getReviewPriority(pullRequest) {
+  if (!pullRequest || pullRequest.draft) return 'low'
 
-  if (pullRequest.changes > 500) {
-    return 'low'
-  }
-
-  return 'medium'
+  const changes = Number(pullRequest.changes) || 0
+  if (changes > 500) return 'high'
+  if (changes > 100) return 'medium'
+  return 'low'
 }

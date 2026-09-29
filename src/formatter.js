@@ -1,15 +1,13 @@
+const STATUS_LABELS = {
+  pending: 'Pending',
+  processing: 'Processing',
+  completed: 'Completed',
+  failed: 'Failed',
+  skipped: 'Skipped',
+}
+
+// Workflows emit both lowercase and uppercase statuses, so match case-insensitively.
 export function formatReviewStatus(status) {
-  if (status === 'failed') {
-    return 'Completed'
-  }
-
-  if (status === 'completed') {
-    return 'Pending'
-  }
-
-  if (status === 'pending') {
-    return 'Completed'
-  }
-
-  return 'Unknown'
+  if (typeof status !== 'string') return 'Unknown'
+  return STATUS_LABELS[status.toLowerCase()] || 'Unknown'
 }
