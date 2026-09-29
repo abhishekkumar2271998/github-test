@@ -8,15 +8,22 @@ import './Carousel.css'
  */
 export default function Carousel({ children, label = 'Carousel', stepLabels = [] }) {
   const slides = Children.toArray(children)
-  const [activeIndex, setActiveIndex] = useState(0)
+  const [selectedIndex, setActiveIndex] = useState(0)
 
   if (slides.length === 0) return null
+
+  // Clamp so removing slides never leaves every slide hidden.
+  const activeIndex = Math.min(selectedIndex, slides.length - 1)
 
   const goTo = (index) => {
     setActiveIndex((index + slides.length) % slides.length)
   }
 
   const handleKeyDown = (event) => {
+    // Don't hijack arrow keys while the user is typing inside a slide.
+    const target = event.target
+    if (target.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName)) return
+
     if (event.key === 'ArrowLeft') {
       event.preventDefault()
       goTo(activeIndex - 1)
@@ -60,7 +67,7 @@ export default function Carousel({ children, label = 'Carousel', stepLabels = []
             <span aria-hidden="true">‹</span>
           </button>
 
-          <div className="carousel__steps" aria-label="Choose a step">
+          <div className="carousel__steps" role="group" aria-label="Choose a step">
             {slides.map((_, index) => (
               <button
                 className={`carousel__step${index === activeIndex ? ' is-active' : ''}`}
