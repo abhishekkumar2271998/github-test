@@ -1,0 +1,125 @@
+.dashboard {
+  width: 100%;
+  color: #171717;
+}
+
+.dashboard__header h2 {
+  margin: 0 0 1rem;
+  font-size: 1.25rem;
+}
+
+.dashboard__stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr));
+  gap: 0.75rem;
+  margin: 0 0 1rem;
+}
+
+.dashboard__stat {
+  padding: 0.75rem 1rem;
+  border-radius: 0.5rem;
+  background: #f1f1f1;
+}
+
+.dashboard__stat dt {
+  color: #555;
+  font-size: 0.8125rem;
+}
+
+.dashboard__stat dd {
+  margin: 0.25rem 0 0;
+  font-size: 1.5rem;
+  font-weight: 600;
+}
+
+.dashboard__filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-bottom: 1rem;
+}
+
+.dashboard__filter {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.35rem 0.75rem;
+  border: 0;
+  border-radius: 999px;
+  background: #f1f1f1;
+  color: #555;
+  font: inherit;
+  font-size: 0.875rem;
+  cursor: pointer;
+}
+
+.dashboard__filter:hover {
+  background: #e2e2e2;
+}
+
+.dashboard__filter.is-active {
+  background: #171717;
+  color: white;
+}
+
+.dashboard__filter-count {
+  font-size: 0.75rem;
+  opacity: 0.75;
+}
+
+.dashboard__filter:focus-visible {
+  outline: 2px solid #2563eb;
+  outline-offset: 3px;
+}
+
+.dashboard__table-wrap {
+  overflow-x: auto;
+}
+
+.dashboard__table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.875rem;
+}
+
+.dashboard__table th,
+.dashboard__table td {
+  padding: 0.6rem 0.75rem;
+  border-bottom: 1px solid #e5e5e5;
+  text-align: left;
+  white-space: nowrap;
+}
+
+.dashboard__table th {
+  color: #555;
+  font-weight: 600;
+}
+
+.dashboard__badge,
+.dashboard__priority {
+  display: inline-block;
+  padding: 0.15rem 0.5rem;
+  border-radius: 999px;
+  background: #e5e5e5;
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: capitalize;
+}
+
+.dashboard__badge--completed { background: #dcfce7; color: #166534; }
+.dashboard__badge--failed { background: #fee2e2; color: #991b1b; }
+.dashboard__badge--processing { background: #dbeafe; color: #1e40af; }
+.dashboard__badge--pending { background: #fef9c3; color: #854d0e; }
+
+.dashboard__priority--high { background: #fee2e2; color: #991b1b; }
+.dashboard__priority--medium { background: #fef9c3; color: #854d0e; }
+
+.dashboard__empty {
+  color: #555;
+}
+
+@media (max-width: 480px) {
+  .dashboard__stat dd {
+    font-size: 1.25rem;
+  }
+}
